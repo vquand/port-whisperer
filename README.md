@@ -1,160 +1,180 @@
 # port-whisperer
 
-**A beautiful CLI tool to see what's running on your ports.**
+**A Rust-first CLI to inspect listening ports and developer processes.**
 
-Stop guessing which process is hogging port 3000. `port-whisperer` gives you a color-coded table of every dev server, database, and background process listening on your machine -- with framework detection, Docker container identification, and interactive process management.
+This repository ports the original `port-whisperer` idea to Rust so it can ship as a native binary with lower runtime overhead and simpler multi-platform distribution.
 
-## What it looks like
+## Credit
 
-```
-$ ports
+The original project was created by **Larsen Cundric**.
 
- ┌─────────────────────────────────────┐
- │  Port Whisperer                     │
- │  listening to your ports...         │
- └─────────────────────────────────────┘
+- Original package: `port-whisperer`
+- Original repository: `https://github.com/larsencundric/port-whisperer`
 
-┌───────┬─────────┬───────┬──────────────────────┬────────────┬────────┬───────────┐
-│ PORT  │ PROCESS │ PID   │ PROJECT              │ FRAMEWORK  │ UPTIME │ STATUS    │
-├───────┼─────────┼───────┼──────────────────────┼────────────┼────────┼───────────┤
-│ :3000 │ node    │ 42872 │ frontend             │ Next.js    │ 1d 9h  │ ● healthy │
-├───────┼─────────┼───────┼──────────────────────┼────────────┼────────┼───────────┤
-│ :3001 │ node    │ 95380 │ preview-app          │ Next.js    │ 2h 40m │ ● healthy │
-├───────┼─────────┼───────┼──────────────────────┼────────────┼────────┼───────────┤
-│ :4566 │ docker  │ 58351 │ backend-localstack-1 │ LocalStack │ 10d 3h │ ● healthy │
-├───────┼─────────┼───────┼──────────────────────┼────────────┼────────┼───────────┤
-│ :5432 │ docker  │ 58351 │ backend-postgres-1   │ PostgreSQL │ 10d 3h │ ● healthy │
-├───────┼─────────┼───────┼──────────────────────┼────────────┼────────┼───────────┤
-│ :6379 │ docker  │ 58351 │ backend-redis-1      │ Redis      │ 10d 3h │ ● healthy │
-└───────┴─────────┴───────┴──────────────────────┴────────────┴────────┴───────────┘
+This repository keeps that functionality as the reference baseline in [`src/`](/Users/doquan/GitHub/port-whisperer/src), and adds a Rust implementation in [`rust-src/main.rs`](/Users/doquan/GitHub/port-whisperer/rust-src/main.rs).
 
-  5 ports active  ·  Run ports <number> for details  ·  --all to show everything
-```
+## Why Rust?
 
-Colors: green = healthy, yellow = orphaned, red = zombie.
+The Node.js version works, but it pays for a JS runtime on every invocation. For a CLI that is launched repeatedly, that cost is visible.
+
+Rust is a better fit here because it gives:
+
+- Lower memory overhead for short-lived CLI runs.
+- Lower startup overhead on heavier commands.
+- A single native binary instead of a Node runtime plus package dependencies.
+- Easier packaging for macOS, Linux, and Windows.
+- A clearer base for future system-level integrations.
+
+The goal of this port is not to change the product. The goal is to keep the same workflow while making distribution and runtime characteristics better.
+
+## Implementations
+
+This repo currently contains two implementations:
+
+- `src/`: original Node.js baseline
+- `rust-src/main.rs`: Rust port, builds to `ports-rs`
+
+The Rust CLI currently covers:
+
+- port table
+- `--all`
+- `ps`
+- `<port>` detail
+- `kill`
+- `clean`
+- `watch`
+
+## Resource Comparison
+
+Measurements below were taken on **April 7, 2026** on the current macOS workspace using the in-repo A/B harness in [`scripts/ab-test.sh`](/Users/doquan/GitHub/port-whisperer/scripts/ab-test.sh).
+
+The numbers are for the same commands run against the Node baseline and the Rust binary.
+
+| Command | Version | Start time | CPU time (user + sys) | Max RSS |
+|---------|---------|------------|------------------------|---------|
+| default | Node | 226.9 ms | 170 ms | 50.1 MB |
+| default | Rust | 271.9 ms | 80 ms | 27.0 MB |
+| `--all` | Node | 199.9 ms | 160 ms | 50.7 MB |
+| `--all` | Rust | 104.0 ms | 70 ms | 26.5 MB |
+| `ps` | Node | 240.2 ms | 230 ms | 56.3 MB |
+| `ps` | Rust | 154.9 ms | 140 ms | 9.5 MB |
+
+What this means in practice:
+
+- Rust used much less RAM in every measured command.
+- Rust used less CPU time in every measured command.
+- Rust was faster for `--all` and `ps`.
+- Rust was slightly slower on the default filtered command in this run, but still used much less memory and CPU.
+
+These are directional benchmarks for this machine and current process set, not a universal claim for all environments.
 
 ## Install
 
+### Prerequisites
+
+- Rust toolchain (`cargo`, `rustc`)
+- On macOS and Linux: system tools such as `lsof`, `ps`, and optionally `docker`
+
+### Build
+
+From the repository root:
+
 ```bash
-npm install -g port-whisperer
+cargo build --release
 ```
 
-Or run it directly without installing:
+The binary will be available at:
 
 ```bash
-npx port-whisperer
+./target/release/ports-rs
 ```
 
-### Or let Claude Code install it for you
+### Optional: keep the Node baseline for comparison
 
-If you use [Claude Code](https://claude.ai/code), you can ask it to `npm install -g port-whisperer` and start using `ports` right away -- no setup steps needed.
+```bash
+npm ci
+```
 
 ## Usage
 
-### Show dev server ports
+### Show dev ports
 
 ```bash
-ports
+./target/release/ports-rs
 ```
-
-Shows dev servers, Docker containers, and databases. System apps (Spotify, Raycast, etc.) are filtered out by default.
 
 ### Show all listening ports
 
 ```bash
-ports --all
+./target/release/ports-rs --all
 ```
 
-Includes system services, desktop apps, and everything else listening on your machine.
-
-### Inspect a specific port
+### Show all developer processes
 
 ```bash
-ports 3000
-# or
-whoisonport 3000
+./target/release/ports-rs ps
 ```
 
-Detailed view: full process tree, repository path, current git branch, memory usage, and an interactive prompt to kill the process.
-
-### Kill a process
+### Inspect one port
 
 ```bash
-ports kill 3000                # kill by port
-ports kill 3000 5173 8080      # kill multiple
-ports kill 42872               # kill by PID
-ports kill -f 3000             # force kill (SIGKILL)
+./target/release/ports-rs 3000
 ```
 
-Resolves port to process automatically. Falls back to PID if no listener matches. Use `-f` when a process won't die gracefully.
-
-### Show all dev processes
+### Kill by port or PID
 
 ```bash
-ports ps
+./target/release/ports-rs kill 3000
+./target/release/ports-rs kill 42872
+./target/release/ports-rs kill -f 3000
 ```
 
-A beautiful `ps aux` for developers. Shows all running dev processes (not just port-bound ones) with CPU%, memory, framework detection, and a smart description column. Docker processes are collapsed into a single summary row.
-
-```
-$ ports ps
-
-┌───────┬─────────┬──────┬──────────┬──────────┬───────────┬─────────┬────────────────────────────────┐
-│ PID   │ PROCESS │ CPU% │ MEM      │ PROJECT  │ FRAMEWORK │ UPTIME  │ WHAT                           │
-├───────┼─────────┼──────┼──────────┼──────────┼───────────┼─────────┼────────────────────────────────┤
-│ 592   │ Docker  │ 1.3  │ 735.5 MB │ —        │ Docker    │ 13d 12h │ 14 processes                   │
-├───────┼─────────┼──────┼──────────┼──────────┼───────────┼─────────┼────────────────────────────────┤
-│ 36664 │ python3 │ 0.2  │ 17.6 MB  │ —        │ Python    │ 6d 10h  │ browser_use.skill_cli.daemon   │
-├───────┼─────────┼──────┼──────────┼──────────┼───────────┼─────────┼────────────────────────────────┤
-│ 26408 │ node    │ 0.1  │ 9.2 MB   │ —        │ Node.js   │ 10d 13h │ jest jest_runner_cloud.js      │
-├───────┼─────────┼──────┼──────────┼──────────┼───────────┼─────────┼────────────────────────────────┤
-│ 25752 │ node    │ 0.0  │ 17.3 MB  │ —        │ Node.js   │ 10d 13h │ server.js                      │
-├───────┼─────────┼──────┼──────────┼──────────┼───────────┼─────────┼────────────────────────────────┤
-│ 66921 │ Python  │ 0.0  │ 4.1 MB   │ —        │ Python    │ 2h 25m  │ src.server                     │
-└───────┴─────────┴──────┴──────────┴──────────┴───────────┴─────────┴────────────────────────────────┘
-
-  5 processes  ·  --all to show everything
-```
+### Clean orphaned or zombie dev processes
 
 ```bash
-ports ps --all    # show all processes, not just dev
+./target/release/ports-rs clean
 ```
-
-### Clean up orphaned processes
-
-```bash
-ports clean
-```
-
-Finds and kills orphaned or zombie dev server processes. Only targets dev runtimes (node, python, etc.) -- won't touch your desktop apps.
 
 ### Watch for port changes
 
 ```bash
-ports watch
+./target/release/ports-rs watch
 ```
 
-Real-time monitoring that notifies you whenever a port starts or stops listening.
+## A/B Testing
+
+To compare the Node baseline with the Rust binary:
+
+```bash
+npm ci
+./scripts/ab-test.sh
+```
+
+The script reports:
+
+- elapsed start time
+- CPU usage via `user + sys`
+- maximum resident memory
 
 ## How it works
 
-Three shell calls, runs in ~0.2s:
+Both versions follow the same basic model:
 
-1. **`lsof -iTCP -sTCP:LISTEN`** -- finds all processes listening on TCP ports
-2. **`ps`** (single batched call) -- retrieves process details for all PIDs at once: command line, uptime, memory, parent PID, status
-3. **`lsof -d cwd`** (single batched call) -- resolves the working directory of each process to detect the project and framework
+1. Find listening TCP ports.
+2. Batch-fetch process metadata.
+3. Resolve working directories where possible.
+4. Detect framework and project metadata.
+5. Present a CLI view for ports or processes.
 
-For Docker ports, a single `docker ps` call maps host ports to container names and images.
+The Rust version still uses platform-native system utilities and OS process data, but removes the Node runtime from the execution path.
 
-Framework detection reads `package.json` dependencies and inspects process command lines. Recognizes Next.js, Vite, Express, Angular, Remix, Astro, Django, Rails, FastAPI, and many others. Docker images are identified as PostgreSQL, Redis, MongoDB, LocalStack, nginx, etc.
-
-## Platform support
+## Platform Support
 
 | Platform | Status |
 |----------|--------|
-| macOS    | Supported |
-| Linux    | Planned |
-| Windows  | Not planned |
+| macOS | Supported in Node and Rust |
+| Linux | Partial support in Rust |
+| Windows | Partial support in Rust |
 
 ## License
 

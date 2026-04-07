@@ -1,0 +1,15 @@
+[package]
+name = "port-whisperer-rs"
+version = "0.1.0"
+edition = "2024"
+description = "Rust port of the port-whisperer CLI"
+license = "MIT"
+
+[[bin]]
+name = "ports-rs"
+path = "rust-src/main.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

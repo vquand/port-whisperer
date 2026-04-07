@@ -31,7 +31,10 @@
     "whoisonport": "./src/index.js"
   },
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "build:rust": "cargo build --release",
+    "test:rust": "cargo test",
+    "ab:test": "./scripts/ab-test.sh"
   },
   "dependencies": {
     "chalk": "5.6.2",
